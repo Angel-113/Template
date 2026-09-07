@@ -13,19 +13,18 @@
 #define _2MB (21 << MAP_HUGE_SHIFT)
 #define _1GB (30 << MAP_HUGE_SHIFT)
 
-static unsigned int __page_size = 0;
+int __page_size = 0;
 
 inline void *get_allocate() __attribute__((constructor(101)));
 inline void *get_deallocate() __attribute__((constructor(101)));
 
 static void *allocate(size_t *size);
 static void deallocate(void *ptr, size_t size);
-static inline unsigned int get_page_size(void)
-    __attribute__((constructor(101)));
+static inline void get_page_size(void) __attribute__((constructor(101)));
 
 inline void *get_allocate() { return &allocate; }
 inline void *get_deallocate() { return &deallocate; }
-static inline unsigned int get_page_size(void) { return sysconf(_SC_PAGESIZE); }
+static inline void get_page_size(void) { __page_size = sysconf(_SC_PAGESIZE); }
 
 static void *allocate(size_t *size) {
   int prot = PROT_READ | PROT_WRITE;

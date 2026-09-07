@@ -15,11 +15,12 @@ struct buffer_t {
   size_t size;
   size_t capacity;
   unsigned char *buffer;
+  struct buffer_t *next;
+  struct buffer_t *prev;
 } buffer_t;
 
 typedef struct slab_t {
   size_t size;
-  size_t buffers;
   void *free_list;
   struct buffer_t *buffer;
 } slab_t __attribute__((aligned(WORD)));
@@ -40,11 +41,22 @@ extern inline slab_t *init_slab(size_t block_size, size_t slab_size) {
     exit(EXIT_FAILURE);
 
   slab->size = block_size;
-  slab->buffer->buffer = (unsigned char *)slab + sizeof(slab_t);
+
+  slab->buffer = (struct buffer_t *)((unsigned char *)slab + sizeof(slab_t));
+
+  slab->buffer->buffer =
+      (unsigned char *)slab->buffer + sizeof(struct buffer_t);
+
   slab->buffer->size = size;
-  slab->buffer->capacity = (slab->buffer->size - sizeof(slab_t)) / block_size;
+
+  slab->buffer->capacity =
+      (slab->buffer->size - (sizeof(slab_t) + sizeof(struct buffer_t))) /
+      block_size;
+
   slab->buffer->current = 0;
 
+  slab->buffer->next = NULL;
+  slab->buffer->prev = NULL;
   slab->free_list = NULL;
 
   destroy_namespace(&namespace);
@@ -54,11 +66,20 @@ extern inline slab_t *init_slab(size_t block_size, size_t slab_size) {
 
 extern inline void destroy_slab(slab_t *slab) {
   mem_alloc_namespace_t namespace = init_namespace();
-  while (slab->buffers-- >= 1) {
-    namespace.deallocate_chunk(&slab->buffer[slab->buffers],
-                               slab->buffer[slab->buffers].size);
+
+  /* the very first buffer of the slab is contiguous to the start position of
+   * the slab itself */
+  struct buffer_t *first_slab =
+      (void *)((unsigned char *)slab + sizeof(slab_t));
+
+  struct buffer_t *current = slab->buffer;
+
+  while ((unsigned char *)current != (unsigned char *)first_slab) {
+    namespace.deallocate_chunk(current, current->size);
+    current = current->prev;
   }
-  namespace.deallocate_chunk(slab, slab->buffer[0].size);
+
+  namespace.deallocate_chunk(slab, slab->buffer->size);
   destroy_namespace(&namespace);
 }
 
@@ -70,30 +91,35 @@ extern void *slab_allocate(slab_t *slab) {
     return free_list_pop(slab->free_list);
 
   void *ptr = NULL;
-  size_t current = slab->buffer[slab->buffers].current;
-  size_t capacity = slab->buffer[slab->buffers].capacity;
 
-  if (!(current < capacity - 1)) { /* Allocate new buffer */
+  size_t *current = &slab->buffer->current;
+  size_t capacity = slab->buffer->capacity;
+
+  if (!(*current + 1 <= capacity)) {
     mem_alloc_namespace_t namespace = init_namespace();
 
-    size_t size = STD_INIT_CAPACITY * slab->size + sizeof(struct buffer_t);
-    struct buffer_t *new_buffer = namespace.allocate_chunk(&size);
+    struct buffer_t **new_buffer = &slab->buffer->next;
+    size_t size = slab->size * STD_INIT_CAPACITY + sizeof(struct buffer_t);
 
-    if (!new_buffer)
-      exit(EXIT_FAILURE);
+    *new_buffer = namespace.allocate_chunk(&size);
 
-    new_buffer->capacity = (size - sizeof(struct buffer_t)) / slab->size;
-    new_buffer->size = size;
-    new_buffer->current = 0;
+    (*new_buffer)->buffer =
+        (unsigned char *)(*new_buffer + sizeof(struct buffer_t));
 
-    struct buffer_t *current_new = &slab->buffer[++slab->buffers];
-    *current_new = *new_buffer;
+    (*new_buffer)->capacity = (size - sizeof(struct buffer_t)) / slab->size;
+    (*new_buffer)->size = size;
+    (*new_buffer)->current = 0;
+    (*new_buffer)->prev = slab->buffer;
+    (*new_buffer)->next = NULL;
+
+    current = &(*new_buffer)->current;
+    slab->buffer = *new_buffer;
 
     destroy_namespace(&namespace);
   }
 
-  ptr = (void *)((unsigned char *)&slab->buffer[slab->buffers].buffer[current]);
-  current++;
+  ptr = (void *)((unsigned char *)slab->buffer->buffer + *current * slab->size);
+  (*current)++;
 
   return ptr;
 }

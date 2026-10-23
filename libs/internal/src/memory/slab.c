@@ -17,7 +17,7 @@ struct buffer_t {
   unsigned char *buffer;
   struct buffer_t *next;
   struct buffer_t *prev;
-} buffer_t;
+};
 
 typedef struct slab_t {
   size_t size;
@@ -28,7 +28,7 @@ typedef struct slab_t {
 static void *free_list_push(void *free_list, void *ptr);
 static void *free_list_pop(void *free_list);
 
-extern inline slab_t *init_slab(size_t block_size, size_t slab_size) {
+extern slab_t *init_slab(size_t block_size, size_t slab_size) {
   slab_t *slab = NULL;
   mem_alloc_namespace_t namespace = init_namespace();
 
@@ -64,7 +64,7 @@ extern inline slab_t *init_slab(size_t block_size, size_t slab_size) {
   return slab;
 }
 
-extern inline void destroy_slab(slab_t *slab) {
+extern void destroy_slab(slab_t *slab) {
   mem_alloc_namespace_t namespace = init_namespace();
 
   /* the very first buffer of the slab is contiguous to the start position of
@@ -79,7 +79,7 @@ extern inline void destroy_slab(slab_t *slab) {
     current = current->prev;
   }
 
-  namespace.deallocate_chunk(slab, slab->buffer->size);
+  namespace.deallocate_chunk(slab, first_slab->size);
   destroy_namespace(&namespace);
 }
 
@@ -103,8 +103,11 @@ extern void *slab_allocate(slab_t *slab) {
 
     *new_buffer = namespace.allocate_chunk(&size);
 
+    if (!(*new_buffer))
+      exit(EXIT_FAILURE);
+
     (*new_buffer)->buffer =
-        (unsigned char *)(*new_buffer + sizeof(struct buffer_t));
+        ((unsigned char *)*new_buffer + sizeof(struct buffer_t));
 
     (*new_buffer)->capacity = (size - sizeof(struct buffer_t)) / slab->size;
     (*new_buffer)->size = size;

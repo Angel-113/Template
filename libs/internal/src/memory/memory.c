@@ -1,11 +1,9 @@
 #include "../../headers/memory/memory.h"
 
-#if defined(__linux__)
-#include "../../core/memory/linux_mem_alloc.c"
+#if defined(__linux__) || defined(__APPLE__)
+#include "../../core/memory/mem_alloc.posix.c"
 #elif defined(__WIN32) || defined(__WIN64)
-#include "../../core/memory/windows_mem_alloc.c"
-#elif defined(__APPLE__) && defined(__MACH__)
-#include "../../core/memory/macos_mem_alloc.c"
+#include "../../core/memory/mem_alloc.windows.c"
 #else
 #error "Unknown or unsupported operating system"
 #endif

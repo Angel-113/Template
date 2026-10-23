@@ -15,8 +15,8 @@
 
 int __page_size = 0;
 
-inline void *get_allocate() __attribute__((constructor(101)));
-inline void *get_deallocate() __attribute__((constructor(101)));
+inline void *get_allocate();
+inline void *get_deallocate();
 
 static void *allocate(size_t *size);
 static void deallocate(void *ptr, size_t size);
